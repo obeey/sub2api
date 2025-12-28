@@ -368,10 +368,16 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		// OAuth accounts use ChatGPT internal API
 		targetURL = chatgptCodexURL
 	case AccountTypeApiKey:
-		// API Key accounts use Platform API or custom base URL
+		// API Key accounts use Platform API or custom base URL.
+		// If the account has a custom base URL, preserve the original incoming request path
+		// (e.g. /v1/chat/completions) so upstream LLMs that expect that path work correctly.
 		baseURL := account.GetOpenAIBaseURL()
 		if baseURL != "" {
-			targetURL = baseURL + "/v1/responses"
+			reqPath := c.Request.URL.Path
+			targetURL = strings.TrimSuffix(baseURL, "/") + reqPath
+			if c.Request.URL.RawQuery != "" {
+				targetURL = targetURL + "?" + c.Request.URL.RawQuery
+			}
 		} else {
 			targetURL = openaiPlatformAPIURL
 		}
@@ -607,6 +613,24 @@ func (s *OpenAIGatewayService) parseSSEUsage(data string, usage *OpenAIUsage) {
 		usage.InputTokens = event.Response.Usage.InputTokens
 		usage.OutputTokens = event.Response.Usage.OutputTokens
 		usage.CacheReadInputTokens = event.Response.Usage.InputTokenDetails.CachedTokens
+		return
+	}
+
+	// Fallback: try Chat Completions / OpenAI usage shape
+	var alt struct {
+		Usage struct {
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
+			TotalTokens      int `json:"total_tokens"`
+		} `json:"usage"`
+	}
+	if json.Unmarshal([]byte(data), &alt) == nil {
+		if alt.Usage.PromptTokens != 0 || alt.Usage.CompletionTokens != 0 || alt.Usage.TotalTokens != 0 {
+			usage.InputTokens = alt.Usage.PromptTokens
+			usage.OutputTokens = alt.Usage.CompletionTokens
+			// total_tokens may include both; CacheReadInputTokens not available
+			usage.CacheReadInputTokens = 0
+		}
 	}
 }
 
@@ -617,7 +641,11 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 	}
 
 	// Parse usage
-	var response struct {
+	// Try Responses API usage shape first
+	var usage OpenAIUsage
+	var parsed bool
+
+	var resp1 struct {
 		Usage struct {
 			InputTokens       int `json:"input_tokens"`
 			OutputTokens      int `json:"output_tokens"`
@@ -626,14 +654,33 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 			} `json:"input_tokens_details"`
 		} `json:"usage"`
 	}
-	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
+	if err := json.Unmarshal(body, &resp1); err == nil {
+		usage.InputTokens = resp1.Usage.InputTokens
+		usage.OutputTokens = resp1.Usage.OutputTokens
+		usage.CacheReadInputTokens = resp1.Usage.InputTokenDetails.CachedTokens
+		parsed = true
 	}
 
-	usage := &OpenAIUsage{
-		InputTokens:          response.Usage.InputTokens,
-		OutputTokens:         response.Usage.OutputTokens,
-		CacheReadInputTokens: response.Usage.InputTokenDetails.CachedTokens,
+	// Fallback to OpenAI Chat Completions usage shape
+	if !parsed {
+		var resp2 struct {
+			Usage struct {
+				PromptTokens     int `json:"prompt_tokens"`
+				CompletionTokens int `json:"completion_tokens"`
+				TotalTokens      int `json:"total_tokens"`
+			} `json:"usage"`
+		}
+		if err := json.Unmarshal(body, &resp2); err == nil {
+			// Map prompt/completion -> input/output
+			usage.InputTokens = resp2.Usage.PromptTokens
+			usage.OutputTokens = resp2.Usage.CompletionTokens
+			usage.CacheReadInputTokens = 0
+			parsed = true
+		}
+	}
+
+	if !parsed {
+		return nil, fmt.Errorf("parse response: unknown usage format")
 	}
 
 	// Replace model in response if needed
@@ -650,7 +697,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 
 	c.Data(resp.StatusCode, "application/json", body)
 
-	return usage, nil
+	return &usage, nil
 }
 
 func (s *OpenAIGatewayService) replaceModelInResponseBody(body []byte, fromModel, toModel string) []byte {

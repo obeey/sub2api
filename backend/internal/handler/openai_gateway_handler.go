@@ -72,7 +72,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 
-	// Extract model and stream
+	// Extract model and stream (do not modify request body for chat/completions)
 	reqModel, _ := reqBody["model"].(string)
 	reqStream, _ := reqBody["stream"].(bool)
 
