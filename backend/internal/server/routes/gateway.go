@@ -26,6 +26,8 @@ func RegisterGatewayRoutes(
 		gateway.GET("/usage", h.Gateway.Usage)
 		// OpenAI Responses API
 		gateway.POST("/responses", h.OpenAIGateway.Responses)
+		// Alias for Chat Completions (compat with clients using /v1/chat/completions)
+		gateway.POST("/chat/completions", h.OpenAIGateway.Responses)
 	}
 
 	// Gemini 原生 API 兼容层（Gemini SDK/CLI 直连）
@@ -40,4 +42,6 @@ func RegisterGatewayRoutes(
 
 	// OpenAI Responses API（不带v1前缀的别名）
 	r.POST("/responses", gin.HandlerFunc(apiKeyAuth), h.OpenAIGateway.Responses)
+	// Alias for Chat Completions without v1 prefix
+	r.POST("/chat/completions", gin.HandlerFunc(apiKeyAuth), h.OpenAIGateway.Responses)
 }
