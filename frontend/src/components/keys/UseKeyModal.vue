@@ -284,19 +284,19 @@ ${keyword('$env:')}${variable('ANTHROPIC_AUTH_TOKEN')}${operator('=')}${string(`
 
 function generateOpenAIFiles(baseUrl: string, apiKey: string): FileConfig[] {
   const isWindows = activeTab.value === 'windows'
-  const configDir = isWindows ? '%userprofile%\\.codex' : '~/.codex'
+  const configDir = isWindows ? '%userprofile%\\.roocode' : '~/.roocode'
 
   // config.toml content
-  const configContent = `model_provider = "sub2api"
-model = "gpt-5.2-codex"
-model_reasoning_effort = "high"
+  const configContent = `model_provider = "codingstack"
+model = "gpt-4"
+model_reasoning_effort = "medium"
 network_access = "enabled"
 disable_response_storage = true
 windows_wsl_setup_acknowledged = true
-model_verbosity = "high"
+model_verbosity = "medium"
 
-[model_providers.sub2api]
-name = "sub2api"
+[model_providers.codingstack]
+name = "codingstack"
 base_url = "${baseUrl}"
 wire_api = "responses"
 requires_openai_auth = true`
