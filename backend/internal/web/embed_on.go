@@ -30,7 +30,8 @@ func ServeEmbeddedFrontend() gin.HandlerFunc {
 			strings.HasPrefix(path, "/v1beta/") ||
 			strings.HasPrefix(path, "/setup/") ||
 			path == "/health" ||
-			path == "/responses" {
+			path == "/responses" ||
+			path == "/chat/completions" {
 			c.Next()
 			return
 		}
