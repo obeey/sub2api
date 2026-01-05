@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+	// "github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -77,16 +77,18 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	reqStream, _ := reqBody["stream"].(bool)
 
 	// For non-Codex CLI requests, set default instructions
-	userAgent := c.GetHeader("User-Agent")
-	if !openai.IsCodexCLIRequest(userAgent) {
-		reqBody["instructions"] = openai.DefaultInstructions
-		// Re-serialize body
-		body, err = json.Marshal(reqBody)
-		if err != nil {
-			h.errorResponse(c, http.StatusInternalServerError, "api_error", "Failed to process request")
-			return
+	/*
+		userAgent := c.GetHeader("User-Agent")
+		if !openai.IsCodexCLIRequest(userAgent) {
+			reqBody["instructions"] = openai.DefaultInstructions
+			// Re-serialize body
+			body, err = json.Marshal(reqBody)
+			if err != nil {
+				h.errorResponse(c, http.StatusInternalServerError, "api_error", "Failed to process request")
+				return
+			}
 		}
-	}
+	*/
 
 	// Track if we've started streaming (for error handling)
 	streamStarted := false
